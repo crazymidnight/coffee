@@ -3,80 +3,117 @@ package main
 import (
 	"fmt"
 	"os"
+	"time"
 
+	"github.com/charmbracelet/bubbles/help"
+	"github.com/charmbracelet/bubbles/key"
+	"github.com/charmbracelet/bubbles/timer"
 	tea "github.com/charmbracelet/bubbletea"
 )
 
+const timeout = time.Minute * 25
+
 type model struct {
-	cursor   int
-	choices  []string
-	selected map[int]struct{}
+	timer    timer.Model
+	keymap   keymap
+	help     help.Model
+	quitting bool
 }
 
-func initialModel() model {
-	return model{
-		choices:  []string{"Buy carrots", "Buy celery", "Buy kohlrabi"},
-		selected: make(map[int]struct{}),
-	}
+type keymap struct {
+	start key.Binding
+	stop  key.Binding
+	reset key.Binding
+	quit  key.Binding
 }
 
 func (m model) Init() tea.Cmd {
-	return tea.SetWindowTitle("Grocery List")
+	return m.timer.Init()
 }
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case timer.TickMsg:
+		var cmd tea.Cmd
+		m.timer, cmd = m.timer.Update(msg)
+		return m, cmd
+
+	case timer.StartStopMsg:
+		var cmd tea.Cmd
+		m.timer, cmd = m.timer.Update(msg)
+		m.keymap.stop.SetEnabled(m.timer.Running())
+		m.keymap.start.SetEnabled(!m.timer.Running())
+		return m, cmd
+
+	case timer.TimeoutMsg:
+		m.quitting = true
+		return m, tea.Quit
+
 	case tea.KeyMsg:
-		switch msg.String() {
-		case "ctrl+c", "q":
+		switch {
+		case key.Matches(msg, m.keymap.quit):
+			m.quitting = true
 			return m, tea.Quit
-		case "up", "k":
-			if m.cursor > 0 {
-				m.cursor--
-			}
-		case "down", "j":
-			if m.cursor < len(m.choices)-1 {
-				m.cursor++
-			}
-		case "enter", " ":
-			_, ok := m.selected[m.cursor]
-			if ok {
-				delete(m.selected, m.cursor)
-			} else {
-				m.selected[m.cursor] = struct{}{}
-			}
+		case key.Matches(msg, m.keymap.reset):
+			m.timer.Timeout = timeout
+		case key.Matches(msg, m.keymap.start, m.keymap.stop):
+			return m, m.timer.Toggle()
 		}
 	}
 
 	return m, nil
 }
 
+func (m model) helpView() string {
+	return "\n" + m.help.ShortHelpView([]key.Binding{
+		m.keymap.start,
+		m.keymap.stop,
+		m.keymap.reset,
+		m.keymap.quit,
+	})
+}
+
 func (m model) View() string {
-	s := "What should we buy at the market?\n\n"
+	s := m.timer.View()
 
-	for i, choice := range m.choices {
-		cursor := " "
-		if m.cursor == i {
-			cursor = ">"
-		}
-
-		checked := " "
-		if _, ok := m.selected[i]; ok {
-			checked = "x"
-		}
-
-		s += fmt.Sprintf("%s [%s] %s\n", cursor, checked, choice)
+	if m.timer.Timedout() {
+		s = "All done"
 	}
-
-	s += "\nPress q to quit.\n"
-
+	s += "\n"
+	if !m.quitting {
+		s = "Exiting in " + s
+		s += m.helpView()
+	}
 	return s
 }
 
 func main() {
-	p := tea.NewProgram(initialModel())
-	if _, err := p.Run(); err != nil {
-		fmt.Printf("Alas, there's been an error: %w", err)
+	m := model{
+		timer: timer.NewWithInterval(timeout, time.Second),
+		keymap: keymap{
+			start: key.NewBinding(
+				key.WithKeys("s"),
+				key.WithHelp("s", "start"),
+			),
+			stop: key.NewBinding(
+				key.WithKeys("s"),
+				key.WithHelp("s", "stop"),
+			),
+			reset: key.NewBinding(
+				key.WithKeys("r"),
+				key.WithHelp("r", "reset"),
+			),
+			quit: key.NewBinding(
+				key.WithKeys("q"),
+				key.WithHelp("q", "quit"),
+			),
+		},
+		help: help.New(),
+	}
+	m.keymap.start.SetEnabled(false)
+
+	if _, err := tea.NewProgram(m).Run(); err != nil {
+		fmt.Println("Exit with error:", err)
 		os.Exit(1)
 	}
 }
