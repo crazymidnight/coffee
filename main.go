@@ -15,6 +15,7 @@ import (
 const timeout = time.Second * 25
 const coffee = "☕"
 const work = "💻"
+const handwave = "👋"
 
 type model struct {
 	timer    timer.Model
@@ -87,13 +88,13 @@ func (m model) View() string {
 		s += coffee
 	} else {
 		s += work
-	}
-	s += work
-	s += "\n"
-	if !m.quitting {
 		s = "Remain " + s
-		s += m.helpView()
 	}
+	s += "\n"
+	if m.quitting {
+		return "Goodbye! " + handwave
+	}
+	s += m.helpView()
 	return s
 }
 
