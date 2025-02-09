@@ -88,6 +88,7 @@ func (m model) View() string {
 	} else {
 		s += work
 	}
+	s += work
 	s += "\n"
 	if !m.quitting {
 		s = "Remain " + s
