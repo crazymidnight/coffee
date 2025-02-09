@@ -9,9 +9,12 @@ import (
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/timer"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/gen2brain/beeep"
 )
 
-const timeout = time.Minute * 25
+const timeout = time.Second * 25
+const coffee = "☕"
+const work = "💻"
 
 type model struct {
 	timer    timer.Model
@@ -46,8 +49,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, cmd
 
 	case timer.TimeoutMsg:
-		m.quitting = true
-		return m, tea.Quit
+		notifyBreak()
+		return m, m.timer.Toggle()
 
 	case tea.KeyMsg:
 		switch {
@@ -57,6 +60,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case key.Matches(msg, m.keymap.reset):
 			m.timer.Timeout = timeout
 		case key.Matches(msg, m.keymap.start, m.keymap.stop):
+			if m.timer.Timedout() {
+				m.timer.Timeout = timeout
+			}
 			return m, m.timer.Toggle()
 		}
 	}
@@ -77,14 +83,21 @@ func (m model) View() string {
 	s := m.timer.View()
 
 	if m.timer.Timedout() {
-		s = "All done"
+		s = "All done. Coffee time!"
+		s += coffee
+	} else {
+		s += work
 	}
 	s += "\n"
 	if !m.quitting {
-		s = "Exiting in " + s
+		s = "Remain " + s
 		s += m.helpView()
 	}
 	return s
+}
+
+func notifyBreak() {
+	beeep.Notify("Break time", "Take a break and drink some coffee", "assets/coffee_logo.png")
 }
 
 func main() {
